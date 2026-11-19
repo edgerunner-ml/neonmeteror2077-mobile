@@ -1,0 +1,6 @@
+{
+  "name": "neon-meteor-2077",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
