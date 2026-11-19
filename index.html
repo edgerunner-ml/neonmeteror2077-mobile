@@ -45,6 +45,7 @@
     height: 100%;
     touch-action: none;
   }
+  @media (pointer: coarse) { #stage::after { display: none; } }   /* sem overlay em cima do canvas no celular */
   /* Scanlines CRT sutis e vinheta (sem mix-blend-mode: preto com alpha rende o mesmo e é bem mais leve no celular) */
   #stage::after {
     content: "";
@@ -60,16 +61,27 @@
 <body>
 <div id="wrap"><div id="stage"><canvas id="c"></canvas></div></div>
 <script>
-const cv = document.getElementById('c'), g = cv.getContext('2d', { alpha: false });
+const cv = document.getElementById('c'), g = cv.getContext('2d', { alpha: false, desynchronized: true });
+
+/* Glow (shadowBlur) é o efeito mais caro no canvas. Se o FPS cair, ele é desligado sozinho
+   (ou force com ?nofx). Interceptar aqui evita mexer nas ~100 chamadas espalhadas. */
+let fx = !new URLSearchParams(location.search).has('nofx');
+if (typeof CanvasRenderingContext2D !== 'undefined') {
+  const sb = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
+  Object.defineProperty(g, 'shadowBlur', {
+    get() { return sb.get.call(g); },
+    set(v) { sb.set.call(g, fx ? v : 0); }
+  });
+}
 const stage = document.getElementById('stage'), wrap = document.getElementById('wrap');
 const VW = 500, VH = 920, R = 10, G = 1000, FL = 78, N = 10;
 const FONT = "'Orbitron', monospace";
 const MONO = "'Share Tech Mono', monospace";
 document.fonts?.load("900 20px Orbitron");
 document.fonts?.load("20px 'Share Tech Mono'");
-/* Resolução lógica 540x960 (a que o jogo foi afinado) renderizada em 1080x1920 reais (RES = 2).
-   Em celular fraco, abra com ?lowres para renderizar em 540x960. */
-const RES = new URLSearchParams(location.search).has('lowres') ? 1 : 2;
+/* Resolução lógica 540x960 (a que o jogo foi afinado). Padrão: canvas 540x960 (leve, sem delay).
+   Abra com ?hd para renderizar em 1080x1920 reais (só vale em aparelho potente). */
+const RES = new URLSearchParams(location.search).has('hd') ? 2 : 1;
 let w = 540, h = 960, dpr = RES, bgStatic;
 
 /* ---------- MESA & GEOMETRIA LÓGICA (100% PRESERVADA) ---------- */
@@ -2069,10 +2081,15 @@ function draw(t) {
 }
 
 /* ---------- LOOP PRINCIPAL ---------- */
-let last = 0;
+let last = 0, fpsAcc = 0, fpsN = 0;
 function loop(t) {
-  const dt = Math.min((t - last) / 1000 || 0, 1 / 30);
+  const raw = (t - last) / 1000 || 0;
+  const dt = Math.min(raw, 1 / 30);
   last = t;
+  if (fx && raw > 0 && raw < 0.5) {            // média de 90 frames abaixo de ~50 FPS => desliga o glow
+    fpsAcc += raw;
+    if (++fpsN >= 90) { if (fpsAcc / fpsN > 1 / 50) fx = false; fpsAcc = fpsN = 0; }
+  }
   update(dt);
   draw(t);
   requestAnimationFrame(loop);
