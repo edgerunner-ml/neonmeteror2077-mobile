@@ -61,7 +61,7 @@
 <body>
 <div id="wrap"><div id="stage"><canvas id="c"></canvas></div></div>
 <script>
-const cv = document.getElementById('c'), g = cv.getContext('2d', { alpha: false, desynchronized: true });
+const cv = document.getElementById('c'), g = cv.getContext('2d', { alpha: false });
 
 /* Glow (shadowBlur) é o efeito mais caro no canvas. Se o FPS cair, ele é desligado sozinho
    (ou force com ?nofx). Interceptar aqui evita mexer nas ~100 chamadas espalhadas. */
@@ -383,7 +383,7 @@ function unlockAudio() {
 }
 let fsTried = false;
 function enterFullscreen() {          // só no 1º toque, só em aparelho touch (iPhone ignora; use "Adicionar à Tela de Início")
-  if (fsTried || !usingTouch) return;
+  if (fsTried || !usingTouch || !location.search.includes('fs')) return;
   fsTried = true;
   const el = document.documentElement;
   if (el.requestFullscreen && !document.fullscreenElement) {
@@ -896,13 +896,22 @@ function drawAnimatedBg(t) {
 }
 
 /* Ajusta o palco 9:16 ao espaço disponível (letterbox), sem mexer na resolução interna */
+let fitQueued = false, lastFit = '';
 function fitStage() {
-  const cs = getComputedStyle(wrap);
-  const aw = innerWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const ah = innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  const s = Math.max(0.1, Math.min(aw / w, ah / h));
-  stage.style.width = (w * s) + 'px';
-  stage.style.height = (h * s) + 'px';
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => {
+    fitQueued = false;
+    const cs = getComputedStyle(wrap);
+    const aw = innerWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const ah = innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const sc = Math.max(0.1, Math.min(aw / w, ah / h));
+    const key = Math.round(w * sc) + 'x' + Math.round(h * sc);
+    if (key === lastFit) return;               // nada mudou: não mexe no layout
+    lastFit = key;
+    stage.style.width = Math.round(w * sc) + 'px';
+    stage.style.height = Math.round(h * sc) + 'px';
+  });
 }
 
 function resize() {
